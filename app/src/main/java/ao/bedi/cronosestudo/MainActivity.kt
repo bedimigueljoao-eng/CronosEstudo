@@ -1,606 +1,66 @@
 package ao.bedi.cronosestudo
 
 import android.Manifest
-import android.app.AlarmManager
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.os.Bundle
+import android.app.*
+import android.content.*
+import android.os.*
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.LocalTime
-import java.time.ZoneId
+import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-data class StudySession(
-    val id: Long = System.currentTimeMillis(),
-    val subject: String,
-    val hour: Int,
-    val minute: Int,
-    val duration: Int,
-    val done: Boolean = false
-)
+data class Session(val id:Long=System.currentTimeMillis(),val subject:String,val date:String,val start:String,val end:String,val minutes:Int,val alarm:Boolean=true,val lead:Int=0,val done:Boolean=false)
+private val Blue=Color(0xFF1684EA); private val Navy=Color(0xFF10233F); private val Bg=Color(0xFFF5F7FC); private val Green=Color(0xFF0DBA73); private val Pink=Color(0xFFFF426D)
 
-class MainActivity : ComponentActivity() {
-    private val requestNotifications =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        createNotificationChannel()
-        if (Build.VERSION.SDK_INT >= 33) {
-            requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        setContent { CronosApp(this) }
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            val channel = NotificationChannel(
-                "study",
-                "Lembretes de estudo",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { enableVibration(true) }
-            getSystemService(NotificationManager::class.java)
-                .createNotificationChannel(channel)
-        }
-    }
+class MainActivity:ComponentActivity(){
+ private val ask=registerForActivityResult(ActivityResultContracts.RequestPermission()){}
+ override fun onCreate(b:Bundle?){super.onCreate(b); channels();if(Build.VERSION.SDK_INT>=33)ask.launch(Manifest.permission.POST_NOTIFICATIONS);setContent{App(this)}}
+ private fun channels(){if(Build.VERSION.SDK_INT>=26)getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("alarm","Alarmes de estudo",NotificationManager.IMPORTANCE_HIGH).apply{setSound(null,null);enableVibration(true);lockscreenVisibility=Notification.VISIBILITY_PUBLIC})}
 }
 
-class AlarmReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        val subject = intent.getStringExtra("subject") ?: "Sessão de estudo"
-        val openApp = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = Notification.Builder(context, "study")
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Hora de estudar")
-            .setContentText(subject)
-            .setContentIntent(openApp)
-            .setAutoCancel(true)
-            .build()
-        context.getSystemService(NotificationManager::class.java)
-            .notify(intent.getLongExtra("id", 1L).toInt(), notification)
-    }
+fun load(c:Context):List<Session> = runCatching{val a=JSONArray(c.getSharedPreferences("db",0).getString("s","[]"));List(a.length()){i->a.getJSONObject(i).let{Session(it.getLong("id"),it.getString("sub"),it.getString("date"),it.getString("start"),it.getString("end"),it.getInt("min"),it.getBoolean("alarm"),it.getInt("lead"),it.getBoolean("done"))}}}.getOrDefault(emptyList())
+fun save(c:Context,x:List<Session>){val a=JSONArray();x.forEach{a.put(JSONObject().put("id",it.id).put("sub",it.subject).put("date",it.date).put("start",it.start).put("end",it.end).put("min",it.minutes).put("alarm",it.alarm).put("lead",it.lead).put("done",it.done))};c.getSharedPreferences("db",0).edit().putString("s",a.toString()).apply()}
+fun schedule(c:Context,s:Session){if(!s.alarm)return;val am=c.getSystemService(AlarmManager::class.java);if(Build.VERSION.SDK_INT>=31&&!am.canScheduleExactAlarms()){c.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM));return};val d=LocalDate.parse(s.date);val t=LocalTime.parse(s.start);val at=LocalDateTime.of(d,t).minusMinutes(s.lead.toLong()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();val i=Intent(c,AlarmReceiver::class.java).putExtra("subject",s.subject).putExtra("id",s.id);val p=PendingIntent.getBroadcast(c,s.id.toInt(),i,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE);am.setAlarmClock(AlarmManager.AlarmClockInfo(at,p),p)}
+
+@Composable fun App(c:Context){var tab by remember{mutableIntStateOf(0)};var data by remember{mutableStateOf(load(c))};var add by remember{mutableStateOf(false)};fun upd(v:List<Session>){data=v;save(c,v)}
+ MaterialTheme(colorScheme=lightColorScheme(primary=Blue,secondary=Pink,background=Bg)){Scaffold(containerColor=Bg,bottomBar={NavigationBar(containerColor=Color.White){listOf("Hoje" to Icons.Default.Home,"Agenda" to Icons.Default.CalendarMonth,"Cronómetro" to Icons.Default.Timer,"Análise" to Icons.Default.BarChart,"Definições" to Icons.Default.Settings).forEachIndexed{i,p->NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Icon(p.second,p.first)},label={Text(p.first,fontSize=9.sp)})}}},floatingActionButton={if(tab<2)FloatingActionButton({add=true},containerColor=Pink){Icon(Icons.Default.Add,null,tint=Color.White)}}){p->Box(Modifier.padding(p)){when(tab){0->Home(data,upd);1->Agenda(data);2->Timer();3->Analysis(data);else->Settings(c)}}};if(add)NewSession({add=false}){s->upd(data+s);schedule(c,s);add=false}}
 }
-
-private val Purple = Color(0xFF635BFF)
-private val Navy = Color(0xFF111827)
-private val Background = Color(0xFFF5F7FB)
-private val Green = Color(0xFF10B981)
-
-private fun loadSessions(context: Context): List<StudySession> {
-    return runCatching {
-        val raw = context.getSharedPreferences("db", Context.MODE_PRIVATE)
-            .getString("sessions", "[]") ?: "[]"
-        val array = JSONArray(raw)
-        List(array.length()) { index ->
-            val item = array.getJSONObject(index)
-            StudySession(
-                id = item.getLong("id"),
-                subject = item.getString("subject"),
-                hour = item.getInt("hour"),
-                minute = item.getInt("minute"),
-                duration = item.getInt("duration"),
-                done = item.getBoolean("done")
-            )
-        }
-    }.getOrDefault(emptyList())
-}
-
-private fun saveSessions(context: Context, sessions: List<StudySession>) {
-    val array = JSONArray()
-    sessions.forEach { session ->
-        array.put(
-            JSONObject()
-                .put("id", session.id)
-                .put("subject", session.subject)
-                .put("hour", session.hour)
-                .put("minute", session.minute)
-                .put("duration", session.duration)
-                .put("done", session.done)
-        )
-    }
-    context.getSharedPreferences("db", Context.MODE_PRIVATE)
-        .edit().putString("sessions", array.toString()).apply()
-}
-
-private fun scheduleAlarm(context: Context, session: StudySession) {
-    val alarmManager = context.getSystemService(AlarmManager::class.java)
-    if (Build.VERSION.SDK_INT >= 31 && !alarmManager.canScheduleExactAlarms()) {
-        context.startActivity(
-            Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-        return
-    }
-
-    var dateTime = LocalDateTime.of(
-        LocalDate.now(),
-        LocalTime.of(session.hour, session.minute)
-    )
-    if (dateTime.isBefore(LocalDateTime.now())) dateTime = dateTime.plusDays(1)
-
-    val intent = Intent(context, AlarmReceiver::class.java)
-        .putExtra("subject", session.subject)
-        .putExtra("id", session.id)
-    val pendingIntent = PendingIntent.getBroadcast(
-        context,
-        session.id.toInt(),
-        intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    val trigger = dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pendingIntent)
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CronosApp(context: Context) {
-    var tab by remember { mutableIntStateOf(0) }
-    var sessions by remember { mutableStateOf(loadSessions(context)) }
-    var showDialog by remember { mutableStateOf(false) }
-
-    fun updateSessions(newList: List<StudySession>) {
-        sessions = newList
-        saveSessions(context, newList)
-    }
-
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Purple,
-            secondary = Green,
-            background = Background
-        )
-    ) {
-        Scaffold(
-            containerColor = Background,
-            bottomBar = {
-                val destinations = listOf(
-                    Triple("Hoje", Icons.Default.Home, 0),
-                    Triple("Agenda", Icons.Default.DateRange, 1),
-                    Triple("Cronómetro", Icons.Default.Timer, 2),
-                    Triple("Análise", Icons.Default.BarChart, 3),
-                    Triple("Definições", Icons.Default.Settings, 4)
-                )
-                NavigationBar {
-                    destinations.forEach { destination ->
-                        NavigationBarItem(
-                            selected = tab == destination.third,
-                            onClick = { tab = destination.third },
-                            icon = { Icon(destination.second, destination.first) },
-                            label = { Text(destination.first, fontSize = 9.sp) }
-                        )
-                    }
-                }
-            },
-            floatingActionButton = {
-                if (tab == 0 || tab == 1) {
-                    FloatingActionButton(onClick = { showDialog = true }) {
-                        Icon(Icons.Default.Add, "Adicionar sessão")
-                    }
-                }
-            }
-        ) { padding ->
-            Box(Modifier.padding(padding)) {
-                when (tab) {
-                    0 -> TodayScreen(sessions, ::updateSessions)
-                    1 -> AgendaScreen(sessions, ::updateSessions)
-                    2 -> TimerScreen { subject, minutes ->
-                        updateSessions(
-                            sessions + StudySession(
-                                subject = subject,
-                                hour = LocalTime.now().hour,
-                                minute = LocalTime.now().minute,
-                                duration = minutes,
-                                done = true
-                            )
-                        )
-                    }
-                    3 -> AnalysisScreen(sessions)
-                    else -> SettingsScreen()
-                }
-            }
-        }
-
-        if (showDialog) {
-            AddSessionDialog(
-                onDismiss = { showDialog = false },
-                onSave = { session ->
-                    val updated = (sessions + session).sortedWith(
-                        compareBy<StudySession> { it.hour }.thenBy { it.minute }
-                    )
-                    updateSessions(updated)
-                    scheduleAlarm(context, session)
-                    showDialog = false
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun AppHeader(title: String, subtitle: String) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.linearGradient(listOf(Navy, Purple)),
-                RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
-            )
-            .padding(24.dp)
-    ) {
-        Column {
-            Text(title, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = Color(0xFFDDE2F1))
-        }
-    }
-}
-
-@Composable
-private fun TodayScreen(
-    sessions: List<StudySession>,
-    update: (List<StudySession>) -> Unit
-) {
-    val studied = sessions.filter { it.done }.sumOf { it.duration }
-    val planned = sessions.sumOf { it.duration }
-    Column {
-        AppHeader(
-            "Olá, Bedi!",
-            LocalDate.now().format(
-                DateTimeFormatter.ofPattern("EEEE, dd 'de' MMMM", Locale("pt", "PT"))
-            )
-        )
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
-        ) {
-            Column(Modifier.padding(18.dp)) {
-                Text("Progresso de hoje", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(
-                    progress = { if (planned == 0) 0f else studied.toFloat() / planned },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    "$studied de $planned minutos concluídos",
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-        }
-        SessionList(sessions, update)
-    }
-}
-
-@Composable
-private fun AgendaScreen(
-    sessions: List<StudySession>,
-    update: (List<StudySession>) -> Unit
-) {
-    Column {
-        AppHeader("Agenda", "Organize as suas sessões de estudo")
-        SessionList(sessions, update)
-    }
-}
-
-@Composable
-private fun SessionList(
-    sessions: List<StudySession>,
-    update: (List<StudySession>) -> Unit
-) {
-    if (sessions.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Nenhuma sessão planeada.")
-        }
-        return
-    }
-
-    LazyColumn(Modifier.padding(horizontal = 16.dp)) {
-        items(sessions, key = { it.id }) { session ->
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        Modifier.size(width = 8.dp, height = 48.dp)
-                            .background(if (session.done) Green else Purple, RoundedCornerShape(8.dp))
-                    )
-                    Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                        Text(session.subject, fontWeight = FontWeight.Bold)
-                        Text(
-                            "%02d:%02d • %d min".format(
-                                session.hour,
-                                session.minute,
-                                session.duration
-                            ),
-                            color = Color.Gray
-                        )
-                    }
-                    IconButton(onClick = {
-                        update(sessions.map {
-                            if (it.id == session.id) it.copy(done = !it.done) else it
-                        })
-                    }) {
-                        Icon(
-                            if (session.done) Icons.Default.CheckCircle
-                            else Icons.Default.RadioButtonUnchecked,
-                            "Concluir",
-                            tint = if (session.done) Green else Color.Gray
-                        )
-                    }
-                    IconButton(onClick = {
-                        update(sessions.filterNot { it.id == session.id })
-                    }) {
-                        Icon(Icons.Default.Delete, "Eliminar", tint = Color(0xFFEF476F))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AddSessionDialog(
-    onDismiss: () -> Unit,
-    onSave: (StudySession) -> Unit
-) {
-    var subject by remember { mutableStateOf("") }
-    var time by remember { mutableStateOf("18:00") }
-    var duration by remember { mutableStateOf("60") }
-    var error by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Nova sessão") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = subject,
-                    onValueChange = { subject = it },
-                    label = { Text("Disciplina") }
-                )
-                OutlinedTextField(
-                    value = time,
-                    onValueChange = { time = it },
-                    label = { Text("Horário (HH:mm)") }
-                )
-                OutlinedTextField(
-                    value = duration,
-                    onValueChange = { duration = it.filter(Char::isDigit) },
-                    label = { Text("Duração em minutos") }
-                )
-                if (error.isNotEmpty()) Text(error, color = Color(0xFFB91C1C))
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val parts = time.split(":")
-                val hour = parts.getOrNull(0)?.toIntOrNull()
-                val minute = parts.getOrNull(1)?.toIntOrNull()
-                val minutes = duration.toIntOrNull()
-                if (subject.isBlank() || hour !in 0..23 || minute !in 0..59 || minutes == null) {
-                    error = "Preencha os dados corretamente."
-                } else {
-                    onSave(
-                        StudySession(
-                            subject = subject.trim(),
-                            hour = hour!!,
-                            minute = minute!!,
-                            duration = minutes.coerceIn(1, 720)
-                        )
-                    )
-                }
-            }) { Text("Guardar") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
-    )
-}
-
-@Composable
-private fun TimerScreen(onFinish: (String, Int) -> Unit) {
-    var running by remember { mutableStateOf(false) }
-    var seconds by remember { mutableLongStateOf(0L) }
-    var subject by remember { mutableStateOf("Estudo livre") }
-
-    LaunchedEffect(running) {
-        while (running) {
-            delay(1000)
-            seconds++
-        }
-    }
-
-    Column {
-        AppHeader("Cronómetro", "Foco sem distrações")
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            OutlinedTextField(
-                value = subject,
-                onValueChange = { subject = it },
-                label = { Text("Disciplina") }
-            )
-            Text(
-                "%02d:%02d:%02d".format(
-                    seconds / 3600,
-                    (seconds / 60) % 60,
-                    seconds % 60
-                ),
-                fontSize = 44.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(28.dp)
-            )
-            Button(
-                onClick = { running = !running },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.PlayArrow, null)
-                Text(if (running) " Pausar" else " Iniciar")
-            }
-            OutlinedButton(
-                onClick = {
-                    if (seconds > 0) {
-                        onFinish(subject.ifBlank { "Estudo livre" }, (seconds / 60).toInt().coerceAtLeast(1))
-                        seconds = 0
-                        running = false
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
-            ) { Text("Terminar e guardar") }
-        }
-    }
-}
-
-@Composable
-private fun AnalysisScreen(sessions: List<StudySession>) {
-    val completed = sessions.filter { it.done }
-    val totalMinutes = completed.sumOf { it.duration }
-    val bySubject = completed.groupBy { it.subject }
-        .mapValues { entry -> entry.value.sumOf { it.duration } }
-        .toList().sortedByDescending { it.second }
-
-    Column {
-        AppHeader("Análise", "Acompanhe a sua evolução")
-        LazyColumn(Modifier.padding(16.dp)) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatCard("Tempo estudado", "${totalMinutes / 60}h ${totalMinutes % 60}m", Modifier.weight(1f))
-                    StatCard(
-                        "Conclusão",
-                        "${if (sessions.isEmpty()) 0 else completed.size * 100 / sessions.size}%",
-                        Modifier.weight(1f)
-                    )
-                }
-                Text(
-                    "Horas por disciplina",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 18.dp)
-                )
-            }
-            items(bySubject) { item ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
-                ) {
-                    Row(Modifier.padding(16.dp)) {
-                        Text(item.first, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                        Text("${item.second / 60}h ${item.second % 60}m")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatCard(title: String, value: String, modifier: Modifier) {
-    Card(modifier, colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, color = Color.Gray)
-            Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun SettingsScreen() {
-    Column {
-        AppHeader("Definições", "Personalize a sua experiência")
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
-        ) {
-            Column(Modifier.padding(18.dp)) {
-                Text("CronosEstudo", fontWeight = FontWeight.Bold)
-                Text("Versão 0.1.1")
-                Text(
-                    "Os dados ficam guardados offline no dispositivo.",
-                    modifier = Modifier.padding(top = 12.dp),
-                    color = Color.Gray
-                )
-            }
-        }
-    }
-}
+@Composable fun Hero(title:String,sub:String){Box(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF1558C9),Color(0xFF7957F4))),RoundedCornerShape(bottomStart=28.dp,bottomEnd=28.dp)).padding(22.dp)){Column{Text(title,Color.White,30.sp,FontWeight.Bold);Text(sub,Color.White,17.sp)}}}
+@Composable fun Home(x:List<Session>,upd:(List<Session>)->Unit){val today=LocalDate.now().toString();val list=x.filter{it.date==today};val done=list.filter{it.done}.sumOf{it.minutes};val total=list.sumOf{it.minutes};Column{Hero("Olá!","Vamos estudar hoje? 💪");Card(Modifier.padding(12.dp).fillMaxWidth(),shape=RoundedCornerShape(20.dp)){Column(Modifier.padding(16.dp)){Row(verticalAlignment=Alignment.CenterVertically){ProgressRing(done,total);Column(Modifier.padding(start=18.dp)){Text("Progresso do dia",fontWeight=FontWeight.Bold);Text("Estudado   ${done/60}h ${done%60}min");Text("Meta do dia   ${total/60}h ${total%60}min")}}};};Text("Suas sessões hoje",Modifier.padding(horizontal=18.dp,vertical=8.dp),fontWeight=FontWeight.Bold,fontSize=18.sp);SessionList(list,upd,x)}}
+@Composable fun ProgressRing(done:Int,total:Int){val f=if(total==0)0f else done.toFloat()/total;Box(Modifier.size(120.dp),contentAlignment=Alignment.Center){Canvas(Modifier.fillMaxSize()){drawArc(Color(0xFFDCE5EF),-90f,360f,false,style=Stroke(12f,cap=StrokeCap.Round));drawArc(Green,-90f,360*f,false,style=Stroke(12f,cap=StrokeCap.Round))};Text("${done/60}h ${done%60}m",fontWeight=FontWeight.Bold)}}
+@Composable fun SessionList(show:List<Session>,upd:(List<Session>)->Unit,all:List<Session>){LazyColumn(Modifier.padding(horizontal=12.dp)){items(show,key={it.id}){s->Card(Modifier.fillMaxWidth().padding(vertical=5.dp),shape=RoundedCornerShape(16.dp)){Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.MenuBook,null,tint=Blue,modifier=Modifier.size(38.dp));Column(Modifier.weight(1f).padding(start=10.dp)){Text(s.subject,fontWeight=FontWeight.Bold);Text("${s.start} - ${s.end}")};IconButton({upd(all.map{if(it.id==s.id)it.copy(done=!it.done)else it})}){Icon(if(s.done)Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,null,tint=if(s.done)Green else Blue)};IconButton({upd(all.filterNot{it.id==s.id})}){Icon(Icons.Default.Delete,null,tint=Pink)}}}}}}
+@Composable fun Agenda(x:List<Session>){Column{Top("Agenda");Row(Modifier.padding(12.dp).fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){listOf("Dia","Semana","Mês").forEach{FilterChip(it=="Semana",{}, {Text(it)})}};Text("Esta semana",Modifier.padding(16.dp),fontWeight=FontWeight.Bold);LazyColumn(Modifier.padding(horizontal=12.dp)){items(x.sortedBy{it.date+it.start}){s->Card(Modifier.fillMaxWidth().padding(5.dp)){Row(Modifier.padding(14.dp)){Text(s.date.takeLast(5),color=Blue,fontWeight=FontWeight.Bold);Column(Modifier.padding(start=16.dp)){Text(s.subject,fontWeight=FontWeight.Bold);Text("${s.start} - ${s.end}")}}}}}}}
+@Composable fun Top(t:String){Box(Modifier.fillMaxWidth().background(Color.White).padding(22.dp)){Text(t,fontSize=26.sp,fontWeight=FontWeight.Bold,color=Navy)}}
+@Composable fun NewSession(close:()->Unit,ok:(Session)->Unit){var sub by remember{mutableStateOf("Matemática")};var date by remember{mutableStateOf(LocalDate.now().toString())};var start by remember{mutableStateOf("18:00")};var end by remember{mutableStateOf("19:30")};var lead by remember{mutableStateOf("10")};var active by remember{mutableStateOf(true)};var err by remember{mutableStateOf("")};AlertDialog(onDismissRequest=close,title={Text("Nova sessão")},text={LazyColumn(verticalArrangement=Arrangement.spacedBy(8.dp)){item{OutlinedTextField(sub,{sub=it},label={Text("Disciplina")})};item{OutlinedTextField(date,{date=it},label={Text("Data (AAAA-MM-DD)")})};item{Row{OutlinedTextField(start,{start=it},Modifier.weight(1f),label={Text("Início")});Spacer(Modifier.width(6.dp));OutlinedTextField(end,{end=it},Modifier.weight(1f),label={Text("Fim")})}};item{Row(verticalAlignment=Alignment.CenterVertically){Text("Ativar alarme",Modifier.weight(1f));Switch(active,{active=it})}};item{OutlinedTextField(lead,{lead=it.filter(Char::isDigit)},label={Text("Aviso antecipado (min)")})};item{Text("Som contínuo e vibração até Parar, Estudar ou Adiar.",fontSize=12.sp,color=Color.Gray)};if(err.isNotEmpty())item{Text(err,color=Pink)}}},confirmButton={Button({runCatching{val a=LocalTime.parse(start);val b=LocalTime.parse(end);val d=LocalDate.parse(date);val m=Duration.between(a,b).toMinutes().toInt();require(sub.isNotBlank()&&m>0);ok(Session(subject=sub,date=d.toString(),start=a.toString(),end=b.toString(),minutes=m,alarm=active,lead=lead.toIntOrNull()?:0))}.onFailure{err="Verifique disciplina, data e horários."}}){Text("Guardar")}},dismissButton={TextButton(close){Text("Cancelar")}})}
+@Composable fun Timer(){var sec by remember{mutableLongStateOf(0)};var run by remember{mutableStateOf(false)};LaunchedEffect(run){while(run){delay(1000);sec++}};Column{Top("Cronómetro");Box(Modifier.fillMaxWidth().padding(24.dp),contentAlignment=Alignment.Center){Canvas(Modifier.size(245.dp)){drawArc(Color(0xFFE2E8F0),-90f,360f,false,style=Stroke(16f));drawArc(Pink,-90f,(sec%3600)/10f,false,style=Stroke(16f,cap=StrokeCap.Round))};Column(horizontalAlignment=Alignment.CenterHorizontally){Text("%02d:%02d:%02d".format(sec/3600,(sec/60)%60,sec%60),fontSize=40.sp,fontWeight=FontWeight.Bold);Text("A estudar");Text("Matemática",color=Blue)}};Row(Modifier.padding(20.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){Button({run=!run},Modifier.weight(1f),colors=ButtonDefaults.buttonColors(containerColor=Pink)){Icon(if(run)Icons.Default.Pause else Icons.Default.PlayArrow,null);Text(if(run)" Pausar" else " Iniciar")};OutlinedButton({sec=0;run=false},Modifier.weight(1f)){Text("Terminar")}}}}
+@Composable fun Analysis(x:List<Session>){val done=x.filter{it.done};val mins=done.sumOf{it.minutes};val g=done.groupBy{it.subject}.mapValues{it.value.sumOf{q->q.minutes}};Column{Top("Análise");Row(Modifier.padding(12.dp)){Stat("Total estudado","${mins/60}h ${mins%60}min",Modifier.weight(1f));Spacer(Modifier.width(10.dp));Stat("Sessões","${done.size}",Modifier.weight(1f))};Text("Horas por disciplina",Modifier.padding(16.dp),fontWeight=FontWeight.Bold,fontSize=18.sp);LazyColumn(Modifier.padding(horizontal=12.dp)){items(g.toList()){p->Card(Modifier.fillMaxWidth().padding(5.dp)){Column(Modifier.padding(14.dp)){Row{Text(p.first,Modifier.weight(1f));Text("${p.second/60}h ${p.second%60}min")};LinearProgressIndicator({if(mins==0)0f else p.second.toFloat()/mins},Modifier.fillMaxWidth().padding(top=8.dp))}}}}}}
+@Composable fun Stat(a:String,b:String,m:Modifier){Card(m){Column(Modifier.padding(16.dp)){Text(a,color=Color.Gray);Text(b,fontSize=22.sp,fontWeight=FontWeight.Bold)}}}
+@Composable fun Settings(c:Context){Column{Top("Definições");Section("Aparência",listOf("Tema" to "Claro","Cor principal" to "Azul","Idioma" to "Português"));Section("Notificações",listOf("Alarmes de estudo" to "Ativo","Som" to "Ativo","Vibração" to "Ativa"));Section("Sobre",listOf("CronosEstudo" to "v1.0.0"));Button({if(Build.VERSION.SDK_INT>=34)c.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).setData(android.net.Uri.parse("package:${c.packageName}")))},Modifier.padding(16.dp).fillMaxWidth()){Text("Autorizar alarme em ecrã inteiro")}}}
+@Composable fun Section(t:String,rows:List<Pair<String,String>>){Text(t,Modifier.padding(start=18.dp,top=14.dp),fontWeight=FontWeight.Bold);Card(Modifier.padding(horizontal=12.dp,vertical=6.dp).fillMaxWidth()){Column{rows.forEach{Row(Modifier.padding(16.dp)){Text(it.first,Modifier.weight(1f));Text(it.second,color=Color.Gray)}}}}}
