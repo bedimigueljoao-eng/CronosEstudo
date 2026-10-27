@@ -1,9 +1,15 @@
-# CronosEstudo v1.0.0
+# CronosEstudo v1.1.0
 
-Versão reconstruída com interface inspirada no protótipo e alarme real.
+Aplicação Android de planeamento e controlo de estudos.
 
-## Instalação no GitHub
-Envie o conteúdo preservando as pastas. O workflow gera o APK automaticamente.
+## Novidades
+- Interface aproximada ao protótipo visual enviado
+- Seleção de disciplina no cronómetro
+- Registo manual de horas e minutos estudados
+- Sessões recorrentes por dias da semana
+- Opções ao tocar numa sessão: iniciar, marcar estudada, adiar e eliminar
+- Análise por disciplina
+- Alarme contínuo em ecrã inteiro com parar, estudar e adiar
 
-## Após instalar
-Autorize notificações, alarmes exatos e, no Android 14+, alarme em ecrã inteiro nas Definições da aplicação.
+## Gerar APK
+O workflow do GitHub Actions executa `gradle assembleDebug` e disponibiliza o artefacto `CronosEstudo-v1.1.0-APK`.
