@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
     private fun createAlarmChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             val channel = NotificationChannel(
-                AlarmService.CHANNEL_ID,
+                "alarm",
                 "Alarmes de estudo",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
@@ -160,7 +160,7 @@ private fun scheduleAlarm(context: Context, session: StudySession) {
     }
     val occurrence = nextOccurrence(session) ?: return
     val intent = Intent(context, AlarmReceiver::class.java)
-        .putExtra(AlarmService.EXTRA_SUBJECT, session.subject)
+        .putExtra("subject", session.subject)
     val pending = PendingIntent.getBroadcast(
         context,
         session.id.toInt(),
