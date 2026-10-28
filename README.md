@@ -1,13 +1,12 @@
-# CronosEstudo v1.2.0
+# CronosEstudo v1.3.0
 
-## Alterações principais
-- Nenhuma disciplina vem predefinida.
-- O utilizador escreve e cria as próprias disciplinas.
-- Cada disciplina pode receber vários horários independentes, cada um com dia da semana, início e fim.
-- O cronómetro aceita disciplina digitada ou já criada.
-- Sessões podem ser iniciadas, marcadas como estudadas, adiadas e eliminadas.
-- Registo manual de horas e minutos estudados.
-- Alarme contínuo em ecrã inteiro, com iniciar estudo, parar e adiar.
+## Alterações
+- Agenda semanal em grelha com dias, horas e blocos coloridos.
+- Navegação entre semanas e seletores Dia, Semana e Mês.
+- Nova sessão com disciplina criada pelo utilizador e vários horários independentes.
+- Análise com total, média, gráfico circular por disciplina e barras semanais.
+- Cronómetro com disciplina digitada ou selecionada.
+- Alarme funcional mantido sem alteração do comportamento.
 
 ## APK
-Ao enviar o projeto ao GitHub, o workflow gera o artefacto `CronosEstudo-v1.2.0-APK`.
+O GitHub Actions gera `CronosEstudo-v1.3.0-APK`.

@@ -490,23 +490,104 @@ private fun PageTitle(title: String) {
 
 @Composable
 private fun AgendaScreen(sessions: List<StudySession>, onClick: (StudySession) -> Unit) {
-    Column {
+    var mode by remember { mutableStateOf("Semana") }
+    var weekOffset by remember { mutableIntStateOf(0) }
+    val monday = LocalDate.now().minusDays((LocalDate.now().dayOfWeek.value - 1).toLong()).plusWeeks(weekOffset.toLong())
+    val sunday = monday.plusDays(6)
+    val dateLabel = "${monday.dayOfMonth} – ${sunday.dayOfMonth} de ${sunday.month.getDisplayName(java.time.format.TextStyle.FULL, Locale("pt", "PT"))} de ${sunday.year}"
+
+    Column(Modifier.fillMaxSize().background(Bg)) {
         PageTitle("Agenda")
-        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            listOf("Dia", "Semana", "Mês").forEach { label ->
-                FilterChip(selected = label == "Semana", onClick = { }, label = { Text(label) })
+        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("Dia", "Semana", "Mês").forEach { item ->
+                Button(
+                    onClick = { mode = item },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (mode == item) Blue else Color(0xFFE9EEF6),
+                        contentColor = if (mode == item) Color.White else Navy
+                    ),
+                    contentPadding = PaddingValues(vertical = 6.dp)
+                ) { Text(item, fontSize = 12.sp) }
             }
         }
-        Text("Semana atual", Modifier.padding(horizontal = 18.dp, vertical = 6.dp), fontWeight = FontWeight.Bold)
-        LazyColumn {
-            items((1..7).toList()) { day ->
-                val daySessions = sessions.filter { day in it.weekdays }.sortedBy { it.start }
-                if (daySessions.isNotEmpty()) {
-                    Text(dayNames[day - 1], Modifier.padding(start = 18.dp, top = 14.dp), color = Blue, fontWeight = FontWeight.Bold)
-                    daySessions.forEach { session -> SessionCard(session) { onClick(session) } }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { weekOffset-- }) { Icon(Icons.Default.ChevronLeft, "Semana anterior") }
+            Text(dateLabel, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            IconButton(onClick = { weekOffset++ }) { Icon(Icons.Default.ChevronRight, "Semana seguinte") }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column {
+                Row(Modifier.fillMaxWidth().padding(start = 38.dp)) {
+                    (1..7).forEach { day ->
+                        val date = monday.plusDays((day - 1).toLong())
+                        Column(Modifier.weight(1f).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(dayNames[day - 1], fontSize = 10.sp, color = Color.Gray)
+                            Text(date.dayOfMonth.toString(), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().height(390.dp)) {
+                    Column(Modifier.width(38.dp).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
+                        listOf("08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00").forEach {
+                            Text(it, fontSize = 9.sp, color = Color.Gray)
+                        }
+                    }
+                    Row(Modifier.weight(1f).fillMaxHeight()) {
+                        (1..7).forEach { day ->
+                            val daySessions = sessions.filter { day in it.weekdays }.sortedBy { it.start }
+                            Box(
+                                Modifier.weight(1f).fillMaxHeight()
+                                    .background(if (day == LocalDate.now().dayOfWeek.value) Blue.copy(alpha = 0.05f) else Color.Transparent)
+                            ) {
+                                Canvas(Modifier.fillMaxSize()) {
+                                    repeat(7) { index ->
+                                        val y = size.height * index / 6f
+                                        drawLine(Color(0xFFE7ECF3), androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 1f)
+                                    }
+                                    drawLine(Color(0xFFE7ECF3), androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, size.height), 1f)
+                                }
+                                daySessions.forEachIndexed { index, session ->
+                                    val startHour = runCatching { LocalTime.parse(session.start).hour + LocalTime.parse(session.start).minute / 60f }.getOrDefault(8f)
+                                    val minutes = durationMinutes(session.start, session.end)
+                                    val top = (((startHour - 8f) / 12f) * 390f).coerceIn(0f, 360f)
+                                    val height = ((minutes / 720f) * 390f).coerceAtLeast(34f)
+                                    val colorIndex = kotlin.math.abs(session.subject.hashCode()) % subjectColors.size
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp)
+                                            .offset(y = top.dp).height(height.dp)
+                                            .clickable { onClick(session) },
+                                        colors = CardDefaults.cardColors(containerColor = subjectColors[colorIndex].copy(alpha = 0.70f)),
+                                        shape = RoundedCornerShape(5.dp)
+                                    ) {
+                                        Text(session.subject, fontSize = 9.sp, modifier = Modifier.padding(4.dp), color = Navy, maxLines = 2)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            item { Spacer(Modifier.height(80.dp)) }
+        }
+        Text("Disciplinas", Modifier.padding(start = 18.dp, top = 12.dp), fontWeight = FontWeight.Bold)
+        val unique = sessions.map { it.subject }.distinct()
+        LazyColumn(Modifier.padding(horizontal = 16.dp)) {
+            items(unique.chunked(2)) { pair ->
+                Row(Modifier.fillMaxWidth()) {
+                    pair.forEach { name ->
+                        val colorIndex = kotlin.math.abs(name.hashCode()) % subjectColors.size
+                        Row(Modifier.weight(1f).padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(12.dp).background(subjectColors[colorIndex], CircleShape))
+                            Text(name, Modifier.padding(start = 8.dp), fontSize = 12.sp)
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -758,36 +839,98 @@ private fun TimerScreen(
 
 @Composable
 private fun AnalysisScreen(sessions: List<StudySession>) {
+    var mode by remember { mutableStateOf("Semana") }
     val total = sessions.sumOf { it.studiedMinutes }
-    val grouped = sessions.groupBy { it.subject }.mapValues { it.value.sumOf { s -> s.studiedMinutes } }
-    Column {
-        PageTitle("Análise")
-        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            listOf("Dia", "Semana", "Mês").forEach { FilterChip(it == "Semana", { }, { Text(it) }) }
+    val grouped = sessions.groupBy { it.subject }
+        .mapValues { entry -> entry.value.sumOf { it.studiedMinutes } }
+        .filterValues { it > 0 }
+        .toList().sortedByDescending { it.second }
+    val byDay = (1..7).map { day -> sessions.filter { day in it.weekdays }.sumOf { it.studiedMinutes } }
+    val maxDay = (byDay.maxOrNull() ?: 1).coerceAtLeast(1)
+
+    LazyColumn(Modifier.fillMaxSize().background(Bg)) {
+        item { PageTitle("Análise") }
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("Dia", "Semana", "Mês").forEach { item ->
+                    Button(
+                        onClick = { mode = item },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (mode == item) Blue else Color(0xFFE9EEF6),
+                            contentColor = if (mode == item) Color.White else Navy
+                        ),
+                        contentPadding = PaddingValues(vertical = 6.dp)
+                    ) { Text(item, fontSize = 12.sp) }
+                }
+            }
         }
-        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatCard("Total estudado", minutesLabel(total), Modifier.weight(1f))
-            StatCard("Média diária", minutesLabel(total / 7), Modifier.weight(1f))
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.ChevronLeft, null)
+                Text("Semana atual", Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Default.ChevronRight, null)
+            }
         }
-        Text("Horas por disciplina", Modifier.padding(18.dp), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        LazyColumn(Modifier.padding(horizontal = 12.dp)) {
-            items(grouped.toList()) { item ->
-                val percent = if (total == 0) 0 else item.second * 100 / total
-                Card(Modifier.fillMaxWidth().padding(vertical = 5.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(Modifier.padding(14.dp)) {
-                        Row {
-                            Text(item.first, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                            Text("${minutesLabel(item.second)} ($percent%)")
+        item {
+            Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatCard("Total estudado", minutesLabel(total), Modifier.weight(1f))
+                StatCard("Média diária", minutesLabel(total / 7), Modifier.weight(1f))
+            }
+        }
+        item { Text("Horas por disciplina", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = FontWeight.Bold) }
+        item {
+            Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(150.dp), contentAlignment = Alignment.Center) {
+                        Canvas(Modifier.fillMaxSize()) {
+                            if (total == 0) {
+                                drawArc(Color(0xFFE2E8F0), -90f, 360f, false, style = Stroke(28f))
+                            } else {
+                                var angle = -90f
+                                grouped.forEachIndexed { index, item ->
+                                    val sweep = item.second * 360f / total
+                                    drawArc(subjectColors[index % subjectColors.size], angle, sweep, false, style = Stroke(28f))
+                                    angle += sweep
+                                }
+                            }
                         }
-                        LinearProgressIndicator(
-                            progress = { if (total == 0) 0f else item.second.toFloat() / total },
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(minutesLabel(total), fontWeight = FontWeight.Bold)
+                            Text("total", color = Color.Gray, fontSize = 11.sp)
+                        }
+                    }
+                    Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                        grouped.forEachIndexed { index, item ->
+                            val percent = if (total == 0) 0 else item.second * 100 / total
+                            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(10.dp).background(subjectColors[index % subjectColors.size], CircleShape))
+                                Text(item.first, Modifier.padding(start = 6.dp).weight(1f), fontSize = 11.sp)
+                                Text("${minutesLabel(item.second)} ($percent%)", fontSize = 10.sp, color = Color.Gray)
+                            }
+                        }
                     }
                 }
             }
-            item { Spacer(Modifier.height(80.dp)) }
         }
+        item { Text("Evolução da semana", Modifier.padding(horizontal = 16.dp, vertical = 14.dp), fontWeight = FontWeight.Bold) }
+        item {
+            Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Row(Modifier.height(190.dp).padding(16.dp), verticalAlignment = Alignment.Bottom) {
+                    byDay.forEachIndexed { index, minutes ->
+                        Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
+                            Box(
+                                Modifier.width(22.dp)
+                                    .fillMaxHeight((minutes.toFloat() / maxDay).coerceIn(0.04f, 1f))
+                                    .background(Blue.copy(alpha = 0.85f), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                            )
+                            Text(dayNames[index], fontSize = 10.sp, modifier = Modifier.padding(top = 6.dp))
+                        }
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(90.dp)) }
     }
 }
 
@@ -808,7 +951,7 @@ private fun SettingsScreen(context: Context) {
         SettingsSection("Aparência", listOf("Tema" to "Claro", "Cor principal" to "Azul", "Idioma" to "Português"))
         SettingsSection("Notificações", listOf("Alarmes de estudo" to "Ativo", "Som" to "Ativo", "Vibração" to "Ativa"))
         SettingsSection("Dados", listOf("Cópia de segurança" to "›", "Exportar dados" to "›"))
-        SettingsSection("Sobre", listOf("CronosEstudo" to "v1.2.0"))
+        SettingsSection("Sobre", listOf("CronosEstudo" to "v1.3.0"))
         Button(
             onClick = {
                 if (Build.VERSION.SDK_INT >= 34) {
