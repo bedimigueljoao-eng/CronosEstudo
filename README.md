@@ -1,17 +1,12 @@
-# CronosEstudo v1.4.0
+# CronosEstudo v1.5.0
 
-## Gestão corrigida
-- Cada bloco da agenda representa uma programação independente.
-- Uma disciplina pode ter programações em vários dias e horários.
-- É possível editar o dia, a hora inicial e a hora final de apenas uma programação.
-- Eliminar uma programação não elimina as outras programações da mesma disciplina.
-- Se a programação já tiver tempo estudado, a eliminação remove apenas o horário futuro e preserva um registo histórico usado na análise.
-- O cronómetro e o registo manual continuam a alimentar a análise.
-
-## Definições
-- Interruptores de alarmes, som, vibração e tema guardam as preferências no dispositivo.
-- Desativar Alarmes de estudo impede novas programações de agendarem alarmes.
-- O acesso à permissão de alarme em ecrã inteiro permanece funcional.
+## Programações independentes
+- Uma disciplina pode ter várias programações em dias e horários diferentes.
+- O botão **Adicionar nova programação** cria outro horário sem substituir o horário existente.
+- **Editar esta programação** altera apenas o bloco selecionado.
+- **Eliminar apenas esta programação** remove somente o horário selecionado e preserva as restantes programações.
+- O histórico estudado continua preservado para a análise.
+- O ícone da aplicação e o alarme em ecrã inteiro foram mantidos.
 
 ## APK
-O workflow gera `CronosEstudo-v1.4.0-APK`.
+O GitHub Actions gera `CronosEstudo-v1.5.0-APK`.
