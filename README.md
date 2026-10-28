@@ -1,12 +1,17 @@
-# CronosEstudo v1.3.0
+# CronosEstudo v1.4.0
 
-## Alterações
-- Agenda semanal em grelha com dias, horas e blocos coloridos.
-- Navegação entre semanas e seletores Dia, Semana e Mês.
-- Nova sessão com disciplina criada pelo utilizador e vários horários independentes.
-- Análise com total, média, gráfico circular por disciplina e barras semanais.
-- Cronómetro com disciplina digitada ou selecionada.
-- Alarme funcional mantido sem alteração do comportamento.
+## Gestão corrigida
+- Cada bloco da agenda representa uma programação independente.
+- Uma disciplina pode ter programações em vários dias e horários.
+- É possível editar o dia, a hora inicial e a hora final de apenas uma programação.
+- Eliminar uma programação não elimina as outras programações da mesma disciplina.
+- Se a programação já tiver tempo estudado, a eliminação remove apenas o horário futuro e preserva um registo histórico usado na análise.
+- O cronómetro e o registo manual continuam a alimentar a análise.
+
+## Definições
+- Interruptores de alarmes, som, vibração e tema guardam as preferências no dispositivo.
+- Desativar Alarmes de estudo impede novas programações de agendarem alarmes.
+- O acesso à permissão de alarme em ecrã inteiro permanece funcional.
 
 ## APK
-O GitHub Actions gera `CronosEstudo-v1.3.0-APK`.
+O workflow gera `CronosEstudo-v1.4.0-APK`.

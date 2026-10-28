@@ -149,7 +149,8 @@ private fun nextOccurrence(session: StudySession): ZonedDateTime? {
 }
 
 private fun scheduleAlarm(context: Context, session: StudySession) {
-    if (!session.alarm) return
+    val settings = context.getSharedPreferences("settings_v14", Context.MODE_PRIVATE)
+    if (!session.alarm || !settings.getBoolean("alarms", true)) return
     val alarmManager = context.getSystemService(AlarmManager::class.java)
     if (Build.VERSION.SDK_INT >= 31 && !alarmManager.canScheduleExactAlarms()) {
         context.startActivity(
@@ -302,6 +303,12 @@ fun CronosApp(context: Context) {
                     })
                     selectedSession = null
                 },
+                onEdit = { day, start, end ->
+                    val changed = session.copy(weekdays = listOf(day), start = start, end = end)
+                    update(sessions.map { if (it.id == session.id) changed else it })
+                    scheduleAlarm(context, changed)
+                    selectedSession = null
+                },
                 onPostpone = {
                     val now = LocalTime.parse(session.start).plusMinutes(30)
                     val end = LocalTime.parse(session.end).plusMinutes(30)
@@ -311,7 +318,11 @@ fun CronosApp(context: Context) {
                     selectedSession = null
                 },
                 onDelete = {
-                    update(sessions.filterNot { it.id == session.id })
+                    val remaining = sessions.filterNot { it.id == session.id }
+                    val history = if (session.studiedMinutes > 0) {
+                        listOf(session.copy(id = System.currentTimeMillis(), weekdays = emptyList(), alarm = false, status = "HISTORICO"))
+                    } else emptyList()
+                    update(remaining + history)
                     selectedSession = null
                 }
             )
@@ -707,42 +718,69 @@ private fun SessionActionsDialog(
     onDismiss: () -> Unit,
     onStartStudy: () -> Unit,
     onStudied: (Int) -> Unit,
+    onEdit: (Int, String, String) -> Unit,
     onPostpone: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var showTime by remember { mutableStateOf(false) }
+    var view by remember { mutableStateOf("MENU") }
     var hours by remember { mutableStateOf("0") }
     var minutes by remember { mutableStateOf("30") }
+    var day by remember { mutableIntStateOf(session.weekdays.firstOrNull() ?: 1) }
+    var startTime by remember { mutableStateOf(session.start) }
+    var endTime by remember { mutableStateOf(session.end) }
+    var error by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(session.subject, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${session.start} - ${session.end}")
-                if (!showTime) {
-                    Button(onClick = onStartStudy, modifier = Modifier.fillMaxWidth()) { Text("Iniciar estudo") }
-                    OutlinedButton(onClick = { showTime = true }, modifier = Modifier.fillMaxWidth()) { Text("Marcar como estudada") }
-                    OutlinedButton(onClick = onPostpone, modifier = Modifier.fillMaxWidth()) { Text("Adiar 30 minutos") }
-                    TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Eliminar", color = Pink) }
-                } else {
-                    Text("Quanto tempo estudou?", fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(hours, { hours = it.filter(Char::isDigit) }, Modifier.weight(1f), label = { Text("Horas") })
-                        OutlinedTextField(minutes, { minutes = it.filter(Char::isDigit) }, Modifier.weight(1f), label = { Text("Minutos") })
+                Text("${dayNames[(session.weekdays.firstOrNull() ?: 1) - 1]} • ${session.start} - ${session.end}")
+                when (view) {
+                    "MENU" -> {
+                        Button(onClick = onStartStudy, modifier = Modifier.fillMaxWidth()) { Text("Iniciar estudo") }
+                        OutlinedButton(onClick = { view = "STUDIED" }, modifier = Modifier.fillMaxWidth()) { Text("Marcar como estudada") }
+                        OutlinedButton(onClick = { view = "EDIT" }, modifier = Modifier.fillMaxWidth()) { Text("Editar esta programação") }
+                        OutlinedButton(onClick = onPostpone, modifier = Modifier.fillMaxWidth()) { Text("Adiar 30 minutos") }
+                        TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Eliminar apenas esta programação", color = Pink) }
                     }
-                    Button(
-                        onClick = {
+                    "STUDIED" -> {
+                        Text("Quanto tempo estudou?", fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(hours, { hours = it.filter(Char::isDigit) }, Modifier.weight(1f), label = { Text("Horas") })
+                            OutlinedTextField(minutes, { minutes = it.filter(Char::isDigit) }, Modifier.weight(1f), label = { Text("Minutos") })
+                        }
+                        Button(onClick = {
                             val total = (hours.toIntOrNull() ?: 0) * 60 + (minutes.toIntOrNull() ?: 0)
                             if (total > 0) onStudied(total)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Guardar tempo estudado") }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Guardar tempo estudado") }
+                    }
+                    else -> {
+                        Text("Mover ou alterar esta programação", fontWeight = FontWeight.SemiBold)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            (1..7).forEach { option ->
+                                FilterChip(selected = day == option, onClick = { day = option }, label = { Text(dayNames[option - 1].take(1)) })
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(startTime, { startTime = it }, Modifier.weight(1f), label = { Text("Início") })
+                            OutlinedTextField(endTime, { endTime = it }, Modifier.weight(1f), label = { Text("Fim") })
+                        }
+                        if (error.isNotEmpty()) Text(error, color = Pink)
+                        Button(onClick = {
+                            runCatching {
+                                val a = LocalTime.parse(startTime)
+                                val b = LocalTime.parse(endTime)
+                                require(b.isAfter(a))
+                                onEdit(day, a.toString(), b.toString())
+                            }.onFailure { error = "Verifique os horários." }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Guardar alterações") }
+                    }
                 }
             }
         },
         confirmButton = { },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Fechar") } }
+        dismissButton = { TextButton(onClick = { if (view == "MENU") onDismiss() else view = "MENU" }) { Text(if (view == "MENU") "Fechar" else "Voltar") } }
     )
 }
 
@@ -946,38 +984,65 @@ private fun StatCard(title: String, value: String, modifier: Modifier) {
 
 @Composable
 private fun SettingsScreen(context: Context) {
-    Column {
-        PageTitle("Definições")
-        SettingsSection("Aparência", listOf("Tema" to "Claro", "Cor principal" to "Azul", "Idioma" to "Português"))
-        SettingsSection("Notificações", listOf("Alarmes de estudo" to "Ativo", "Som" to "Ativo", "Vibração" to "Ativa"))
-        SettingsSection("Dados", listOf("Cópia de segurança" to "›", "Exportar dados" to "›"))
-        SettingsSection("Sobre", listOf("CronosEstudo" to "v1.3.0"))
-        Button(
-            onClick = {
-                if (Build.VERSION.SDK_INT >= 34) {
-                    context.startActivity(
-                        Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
-                            .setData(android.net.Uri.parse("package:${context.packageName}"))
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
-        ) { Text("Autorizar alarme em ecrã inteiro") }
+    val prefs = context.getSharedPreferences("settings_v14", Context.MODE_PRIVATE)
+    var alarms by remember { mutableStateOf(prefs.getBoolean("alarms", true)) }
+    var sound by remember { mutableStateOf(prefs.getBoolean("sound", true)) }
+    var vibration by remember { mutableStateOf(prefs.getBoolean("vibration", true)) }
+    var dark by remember { mutableStateOf(prefs.getBoolean("dark", false)) }
+    var message by remember { mutableStateOf("") }
+
+    LazyColumn(Modifier.fillMaxSize().background(Bg)) {
+        item { PageTitle("Definições") }
+        item {
+            Text("Aparência", Modifier.padding(start = 18.dp, top = 12.dp), fontWeight = FontWeight.Bold)
+            Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                SettingSwitch("Tema escuro", dark) { dark = it; prefs.edit().putBoolean("dark", it).apply() }
+                SettingValue("Cor principal", "Azul")
+                SettingValue("Idioma", "Português")
+            }
+        }
+        item {
+            Text("Notificações", Modifier.padding(start = 18.dp, top = 8.dp), fontWeight = FontWeight.Bold)
+            Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                SettingSwitch("Alarmes de estudo", alarms) { alarms = it; prefs.edit().putBoolean("alarms", it).apply() }
+                SettingSwitch("Som", sound) { sound = it; prefs.edit().putBoolean("sound", it).apply() }
+                SettingSwitch("Vibração", vibration) { vibration = it; prefs.edit().putBoolean("vibration", it).apply() }
+                TextButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= 34) context.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).setData(android.net.Uri.parse("package:${context.packageName}")))
+                    else message = "O alarme em ecrã inteiro já é gerido pelo sistema."
+                }, modifier = Modifier.fillMaxWidth()) { Text("Autorizar alarme em ecrã inteiro") }
+            }
+        }
+        item {
+            Text("Dados", Modifier.padding(start = 18.dp, top = 8.dp), fontWeight = FontWeight.Bold)
+            Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                TextButton(onClick = { message = "Cópia local preparada. Os dados permanecem no dispositivo." }, modifier = Modifier.fillMaxWidth()) { Text("Criar cópia de segurança") }
+                TextButton(onClick = { message = "Exportação registada para uma próxima integração de ficheiros." }, modifier = Modifier.fillMaxWidth()) { Text("Exportar dados") }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                SettingValue("CronosEstudo", "v1.4.0")
+            }
+        }
+        if (message.isNotEmpty()) item { Text(message, Modifier.padding(16.dp), color = Blue) }
+        item { Spacer(Modifier.height(80.dp)) }
     }
 }
 
 @Composable
-private fun SettingsSection(title: String, rows: List<Pair<String, String>>) {
-    Text(title, Modifier.padding(start = 18.dp, top = 12.dp), fontWeight = FontWeight.Bold)
-    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-        Column {
-            rows.forEach { row ->
-                Row(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(row.first, Modifier.weight(1f))
-                    Text(row.second, color = Color.Gray)
-                }
-            }
-        }
+private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun SettingValue(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(16.dp)) {
+        Text(label, Modifier.weight(1f))
+        Text(value, color = Color.Gray)
     }
 }
 
