@@ -56,7 +56,7 @@ private val Pink = Color(0xFFFF426D)
 private val Purple = Color(0xFF7C5CE7)
 private val Orange = Color(0xFFFF8A3D)
 private val Yellow = Color(0xFFF9C21A)
-private val subjects = listOf("Matemática", "Inglês", "Python", "Excel", "História", "Power BI")
+private val subjects = emptyList<String>()
 private val subjectColors = listOf(Blue, Green, Orange, Pink, Purple, Yellow)
 private val dayNames = listOf("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
 
@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
     private fun createAlarmChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             val channel = NotificationChannel(
-               "alarm",
+                AlarmService.CHANNEL_ID,
                 "Alarmes de estudo",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
@@ -160,7 +160,7 @@ private fun scheduleAlarm(context: Context, session: StudySession) {
     }
     val occurrence = nextOccurrence(session) ?: return
     val intent = Intent(context, AlarmReceiver::class.java)
-        .putExtra("subject", session.subject)
+        .putExtra(AlarmService.EXTRA_SUBJECT, session.subject)
     val pending = PendingIntent.getBroadcast(
         context,
         session.id.toInt(),
@@ -180,7 +180,7 @@ fun CronosApp(context: Context) {
     var sessions by remember { mutableStateOf(loadSessions(context)) }
     var showNew by remember { mutableStateOf(false) }
     var selectedSession by remember { mutableStateOf<StudySession?>(null) }
-    var timerSubject by remember { mutableStateOf(subjects.first()) }
+    var timerSubject by remember { mutableStateOf("") }
     var timerRequested by remember { mutableStateOf(false) }
 
     fun update(newData: List<StudySession>) {
@@ -240,7 +240,7 @@ fun CronosApp(context: Context) {
                     )
                     1 -> AgendaScreen(sessions) { selectedSession = it }
                     2 -> TimerScreen(
-                        subjects = subjects,
+                        subjects = sessions.map { it.subject }.filter { it.isNotBlank() }.distinct(),
                         initialSubject = timerSubject,
                         autoStart = timerRequested,
                         onAutoStartConsumed = { timerRequested = false },
@@ -275,9 +275,9 @@ fun CronosApp(context: Context) {
         if (showNew) {
             NewSessionDialog(
                 onDismiss = { showNew = false },
-                onSave = { session ->
-                    update(sessions + session)
-                    scheduleAlarm(context, session)
+                onSave = { newSessions ->
+                    update(sessions + newSessions)
+                    newSessions.forEach { scheduleAlarm(context, it) }
                     showNew = false
                 }
             )
@@ -512,54 +512,71 @@ private fun AgendaScreen(sessions: List<StudySession>, onClick: (StudySession) -
 }
 
 @Composable
-private fun NewSessionDialog(onDismiss: () -> Unit, onSave: (StudySession) -> Unit) {
-    var subject by remember { mutableStateOf(subjects.first()) }
-    var expanded by remember { mutableStateOf(false) }
-    var start by remember { mutableStateOf("11:00") }
-    var end by remember { mutableStateOf("12:30") }
-    var selectedDays by remember { mutableStateOf(setOf(LocalDate.now().dayOfWeek.value)) }
+private fun NewSessionDialog(onDismiss: () -> Unit, onSave: (List<StudySession>) -> Unit) {
+    data class ScheduleDraft(val day: Int, val start: String, val end: String)
+    var subject by remember { mutableStateOf("") }
+    var day by remember { mutableIntStateOf(LocalDate.now().dayOfWeek.value) }
+    var startTime by remember { mutableStateOf("18:00") }
+    var endTime by remember { mutableStateOf("19:00") }
+    var schedules by remember { mutableStateOf(emptyList<ScheduleDraft>()) }
     var alarm by remember { mutableStateOf(true) }
     var lead by remember { mutableStateOf("10") }
     var error by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nova sessão", fontWeight = FontWeight.Bold) },
+        title = { Text("Nova disciplina e horários", fontWeight = FontWeight.Bold) },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item {
-                    Text("Disciplina", fontWeight = FontWeight.SemiBold)
-                    Box {
-                        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.MenuBook, null)
-                            Text("  $subject", Modifier.weight(1f))
-                            Icon(Icons.Default.ArrowDropDown, null)
-                        }
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            subjects.forEach { option ->
-                                DropdownMenuItem(text = { Text(option) }, onClick = { subject = option; expanded = false })
-                            }
-                        }
-                    }
+                    OutlinedTextField(
+                        value = subject,
+                        onValueChange = { subject = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Nome da disciplina") },
+                        placeholder = { Text("Ex.: Contabilidade") }
+                    )
                 }
+                item { Text("Adicionar horário", fontWeight = FontWeight.SemiBold) }
                 item {
-                    Text("Dias da semana", fontWeight = FontWeight.SemiBold)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        (1..7).forEach { day ->
+                        (1..7).forEach { option ->
                             FilterChip(
-                                selected = day in selectedDays,
-                                onClick = {
-                                    selectedDays = if (day in selectedDays) selectedDays - day else selectedDays + day
-                                },
-                                label = { Text(dayNames[day - 1].take(1)) }
+                                selected = day == option,
+                                onClick = { day = option },
+                                label = { Text(dayNames[option - 1].take(1)) }
                             )
                         }
                     }
                 }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(start, { start = it }, Modifier.weight(1f), label = { Text("Início") })
-                        OutlinedTextField(end, { end = it }, Modifier.weight(1f), label = { Text("Fim") })
+                        OutlinedTextField(startTime, { startTime = it }, Modifier.weight(1f), label = { Text("Início") })
+                        OutlinedTextField(endTime, { endTime = it }, Modifier.weight(1f), label = { Text("Fim") })
+                    }
+                }
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                val a = LocalTime.parse(startTime)
+                                val b = LocalTime.parse(endTime)
+                                require(b.isAfter(a))
+                                schedules = schedules + ScheduleDraft(day, a.toString(), b.toString())
+                                error = ""
+                            }.onFailure { error = "Horário inválido." }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("+ Adicionar este horário") }
+                }
+                items(schedules) { schedule ->
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F5FC))) {
+                        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${dayNames[schedule.day - 1]}  ${schedule.start} - ${schedule.end}", Modifier.weight(1f))
+                            IconButton(onClick = { schedules = schedules - schedule }) {
+                                Icon(Icons.Default.Delete, "Remover", tint = Pink)
+                            }
+                        }
                     }
                 }
                 item {
@@ -582,21 +599,21 @@ private fun NewSessionDialog(onDismiss: () -> Unit, onSave: (StudySession) -> Un
         },
         confirmButton = {
             Button(onClick = {
-                runCatching {
-                    val startTime = LocalTime.parse(start)
-                    val endTime = LocalTime.parse(end)
-                    require(endTime.isAfter(startTime) && selectedDays.isNotEmpty())
-                    onSave(
+                if (subject.isBlank() || schedules.isEmpty()) {
+                    error = "Indique a disciplina e adicione pelo menos um horário."
+                } else {
+                    val reminder = lead.toIntOrNull()?.coerceIn(0, 120) ?: 10
+                    onSave(schedules.map { schedule ->
                         StudySession(
-                            subject = subject,
-                            start = startTime.toString(),
-                            end = endTime.toString(),
-                            weekdays = selectedDays.sorted(),
+                            subject = subject.trim(),
+                            start = schedule.start,
+                            end = schedule.end,
+                            weekdays = listOf(schedule.day),
                             alarm = alarm,
-                            leadMinutes = lead.toIntOrNull()?.coerceIn(0, 120) ?: 10
+                            leadMinutes = reminder
                         )
-                    )
-                }.onFailure { error = "Selecione os dias e verifique os horários." }
+                    })
+                }
             }) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
@@ -676,15 +693,22 @@ private fun TimerScreen(
 
     Column {
         PageTitle("Cronómetro")
-        Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.MenuBook, null)
-                Text("  $subject", Modifier.weight(1f))
-                Icon(Icons.Default.ArrowDropDown, null)
-            }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                subjects.forEach { option ->
-                    DropdownMenuItem(text = { Text(option) }, onClick = { subject = option; expanded = false })
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
+            OutlinedTextField(
+                value = subject,
+                onValueChange = { subject = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Disciplina a estudar") },
+                placeholder = { Text("Escreva ou selecione") }
+            )
+            if (subjects.isNotEmpty()) {
+                Box {
+                    TextButton(onClick = { expanded = true }) { Text("Selecionar disciplina existente") }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        subjects.forEach { option ->
+                            DropdownMenuItem(text = { Text(option) }, onClick = { subject = option; expanded = false })
+                        }
+                    }
                 }
             }
         }
@@ -784,7 +808,7 @@ private fun SettingsScreen(context: Context) {
         SettingsSection("Aparência", listOf("Tema" to "Claro", "Cor principal" to "Azul", "Idioma" to "Português"))
         SettingsSection("Notificações", listOf("Alarmes de estudo" to "Ativo", "Som" to "Ativo", "Vibração" to "Ativa"))
         SettingsSection("Dados", listOf("Cópia de segurança" to "›", "Exportar dados" to "›"))
-        SettingsSection("Sobre", listOf("CronosEstudo" to "v1.1.0"))
+        SettingsSection("Sobre", listOf("CronosEstudo" to "v1.2.0"))
         Button(
             onClick = {
                 if (Build.VERSION.SDK_INT >= 34) {
