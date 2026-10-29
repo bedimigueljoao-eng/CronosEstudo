@@ -36,6 +36,24 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+data class Discipline(
+    val id: String,
+    val name: String,
+    val colorIndex: Int = 0,
+    val archived: Boolean = false
+)
+
+data class StudyLog(
+    val id: Long = System.currentTimeMillis(),
+    val disciplineName: String,
+    val slotId: Long?,
+    val date: String,
+    val status: String,
+    val minutesStudied: Int
+)
+
+// Cada StudySession representa um ScheduleSlot independente.
+// O ID identifica somente uma programação, nunca a disciplina inteira.
 data class StudySession(
     val id: Long = System.currentTimeMillis(),
     val subject: String,
@@ -301,6 +319,19 @@ fun CronosApp(context: Context) {
                             status = "ESTUDADO"
                         ) else it
                     })
+                    selectedSession = null
+                },
+                onAddSchedule = { day, start, end ->
+                    val added = StudySession(
+                        subject = session.subject,
+                        start = start,
+                        end = end,
+                        weekdays = listOf(day),
+                        alarm = session.alarm,
+                        leadMinutes = session.leadMinutes
+                    )
+                    update(sessions + added)
+                    scheduleAlarm(context, added)
                     selectedSession = null
                 },
                 onEdit = { day, start, end ->
@@ -718,6 +749,7 @@ private fun SessionActionsDialog(
     onDismiss: () -> Unit,
     onStartStudy: () -> Unit,
     onStudied: (Int) -> Unit,
+    onAddSchedule: (Int, String, String) -> Unit,
     onEdit: (Int, String, String) -> Unit,
     onPostpone: () -> Unit,
     onDelete: () -> Unit
@@ -730,18 +762,28 @@ private fun SessionActionsDialog(
     var endTime by remember { mutableStateOf(session.end) }
     var error by remember { mutableStateOf("") }
 
+    fun validateAndRun(action: (Int, String, String) -> Unit) {
+        runCatching {
+            val start = LocalTime.parse(startTime)
+            val end = LocalTime.parse(endTime)
+            require(end.isAfter(start))
+            action(day, start.toString(), end.toString())
+        }.onFailure { error = "Verifique o dia e os horários." }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(session.subject, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${dayNames[(session.weekdays.firstOrNull() ?: 1) - 1]} • ${session.start} - ${session.end}")
+                Text("Programação selecionada: ${dayNames[(session.weekdays.firstOrNull() ?: 1) - 1]} • ${session.start} - ${session.end}")
                 when (view) {
                     "MENU" -> {
                         Button(onClick = onStartStudy, modifier = Modifier.fillMaxWidth()) { Text("Iniciar estudo") }
                         OutlinedButton(onClick = { view = "STUDIED" }, modifier = Modifier.fillMaxWidth()) { Text("Marcar como estudada") }
+                        OutlinedButton(onClick = { view = "ADD"; day = 1 }, modifier = Modifier.fillMaxWidth()) { Text("+ Adicionar outro dia/horário") }
                         OutlinedButton(onClick = { view = "EDIT" }, modifier = Modifier.fillMaxWidth()) { Text("Editar esta programação") }
-                        OutlinedButton(onClick = onPostpone, modifier = Modifier.fillMaxWidth()) { Text("Adiar 30 minutos") }
+                        OutlinedButton(onClick = onPostpone, modifier = Modifier.fillMaxWidth()) { Text("Adiar esta programação 30 min") }
                         TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Eliminar apenas esta programação", color = Pink) }
                     }
                     "STUDIED" -> {
@@ -755,11 +797,15 @@ private fun SessionActionsDialog(
                             if (total > 0) onStudied(total)
                         }, modifier = Modifier.fillMaxWidth()) { Text("Guardar tempo estudado") }
                     }
-                    else -> {
-                        Text("Mover ou alterar esta programação", fontWeight = FontWeight.SemiBold)
+                    "ADD", "EDIT" -> {
+                        Text(if (view == "ADD") "Adicionar outro dia e horário" else "Editar somente a programação selecionada", fontWeight = FontWeight.SemiBold)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             (1..7).forEach { option ->
-                                FilterChip(selected = day == option, onClick = { day = option }, label = { Text(dayNames[option - 1].take(1)) })
+                                FilterChip(
+                                    selected = day == option,
+                                    onClick = { day = option },
+                                    label = { Text(dayNames[option - 1].take(1)) }
+                                )
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -767,20 +813,23 @@ private fun SessionActionsDialog(
                             OutlinedTextField(endTime, { endTime = it }, Modifier.weight(1f), label = { Text("Fim") })
                         }
                         if (error.isNotEmpty()) Text(error, color = Pink)
-                        Button(onClick = {
-                            runCatching {
-                                val a = LocalTime.parse(startTime)
-                                val b = LocalTime.parse(endTime)
-                                require(b.isAfter(a))
-                                onEdit(day, a.toString(), b.toString())
-                            }.onFailure { error = "Verifique os horários." }
-                        }, modifier = Modifier.fillMaxWidth()) { Text("Guardar alterações") }
+                        Button(
+                            onClick = { validateAndRun(if (view == "ADD") onAddSchedule else onEdit) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(if (view == "ADD") "Guardar novo dia/horário" else "Guardar alterações") }
+                        if (view == "ADD") {
+                            Text("A programação selecionada será mantida. Este dia e horário serão adicionados como uma nova programação independente da mesma disciplina.", fontSize = 12.sp, color = Color.Gray)
+                        }
                     }
                 }
             }
         },
         confirmButton = { },
-        dismissButton = { TextButton(onClick = { if (view == "MENU") onDismiss() else view = "MENU" }) { Text(if (view == "MENU") "Fechar" else "Voltar") } }
+        dismissButton = {
+            TextButton(onClick = { if (view == "MENU") onDismiss() else view = "MENU" }) {
+                Text(if (view == "MENU") "Fechar" else "Voltar")
+            }
+        }
     )
 }
 

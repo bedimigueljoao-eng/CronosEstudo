@@ -1,12 +1,20 @@
-# CronosEstudo v1.5.0
+# CronosEstudo v1.6.0
 
-## Programações independentes
-- Uma disciplina pode ter várias programações em dias e horários diferentes.
-- O botão **Adicionar nova programação** cria outro horário sem substituir o horário existente.
-- **Editar esta programação** altera apenas o bloco selecionado.
-- **Eliminar apenas esta programação** remove somente o horário selecionado e preserva as restantes programações.
-- O histórico estudado continua preservado para a análise.
-- O ícone da aplicação e o alarme em ecrã inteiro foram mantidos.
+## Lógica corrigida com base no modelo fornecido
 
-## APK
-O GitHub Actions gera `CronosEstudo-v1.5.0-APK`.
+A aplicação passa a distinguir explicitamente:
+
+1. **Discipline**: identidade da disciplina.
+2. **ScheduleSlot**: cada dia e horário independente no calendário.
+3. **StudyLog**: histórico do que foi efetivamente estudado.
+
+## Comportamento
+
+- Adicionar outro dia/horário cria um novo slot com ID próprio.
+- O slot já existente não é alterado.
+- Editar altera somente o slot selecionado.
+- Eliminar remove somente o slot selecionado.
+- Tempo estudado associado a um slot eliminado é preservado como histórico.
+- O alarme, o ícone e a interface de agenda/análise permanecem incluídos.
+
+O GitHub Actions gera `CronosEstudo-v1.6.0-APK`.
