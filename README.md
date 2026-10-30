@@ -1,2 +1,2 @@
-# CronosEstudo v1.7.0
-Arquitetura separada: Discipline, ScheduleSlot e StudyLog. A disciplina permanece após remover horários; o histórico permanece associado à disciplina. Agenda diária e semanal incluídas.
+# CronosEstudo v1.7.3
+Disciplinas, programações e histórico separados. Dados persistentes, agenda semanal, registo manual de horas/minutos, cronómetro persistente e alarme exacto com som/vibração.
