@@ -1,11 +1,35 @@
-plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose") }
-android {
-    namespace = "ao.bedi.cronosestudo"; compileSdk = 35
-    defaultConfig { applicationId = "ao.bedi.cronosestudo"; minSdk = 26; targetSdk = 35; versionCode = 18; versionName = "1.7.1" }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    buildFeatures { compose = true }
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
-kotlin { jvmToolchain(17) }
+
+android {
+    namespace = "ao.bedi.cronosestudo"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "ao.bedi.cronosestudo"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 20
+        versionName = "1.7.3"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose = true
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.activity:activity-compose:1.10.0")
